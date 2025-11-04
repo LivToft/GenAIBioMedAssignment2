@@ -39,7 +39,6 @@ def main():
 
     # ---------------- WandB ----------------
     parser.add_argument("--wandb_key", type=str, default=None, help="WandB API key")
-    parser.add_argument("--wandb_entity", type=str, default=None, help="WandB entity name")
     parser.add_argument("--wandb_project", type=str, default=None, help="WandB project name")
     parser.add_argument("--run_name", type=str, default='i_forgot_to_name', help="run name")
 
@@ -53,7 +52,8 @@ def main():
 
     if args.config is not None:
         with open(args.config, 'r', encoding='utf-8') as f:
-            config_args = yaml.safe_load(f)
+            file_yaml = yaml.YAML()
+            config_args = file_yaml.load(f)
             parser.set_defaults(**config_args)
 
     args = parser.parse_args()

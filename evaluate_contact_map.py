@@ -10,7 +10,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ruamel.yaml import yaml
+import ruamel.yaml as yaml
+import os
 
 from evo2 import Evo2
 
@@ -28,25 +29,27 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Test Evo2 Model Forward Pass")
 
-    parser.add_argument("--config", type=str, help="Path to config file", default="configs/baseline.yaml")
+    parser.add_argument("--model_path", type=Path, help="Path to model checkpoint")
     parser.add_argument("--model_name", choices=['evo2_7b', 'evo2_40b', 'evo2_7b_base', 'evo2_40b_base', 'evo2_1b_base'], default='evo2_7b', help="Model to test")
 
+    
     args = parser.parse_args()
 
-    if args.config is not None:
-        with open(args.config, 'r', encoding='utf-8') as f:
-            config_args = yaml.safe_load(f)
-            parser.set_defaults(**config_args)
+    model_dir = args.model_path.parent.parent
+    config = os.path.join(model_dir, 'config.yaml')
+
+    with open(config, 'r', encoding='utf-8') as f:
+        config_args = yaml.safe_load(f)
+        parser.set_defaults(**config_args)
 
     args = parser.parse_args()
     
-    args = parser.parse_args()
     for cell in ["HFF"]:
         print(cell)
         
-        save_path = "evo2/contact_map/{}/model.pt".format(cell)
-        fw_pred = open("evo2/contact_map/{}/pred.npy".format(cell), "wb")
-        fw_tgt = open("evo2/contact_map/{}/target.npy".format(cell), "wb")
+        save_path = args.model_path
+        fw_pred = open(f"{model_dir}/pred.npy", "wb")
+        fw_tgt = open(f"{model_dir}/target.npy", "wb")
         
         # Initialize model
         model = Evo2(args.model_name)

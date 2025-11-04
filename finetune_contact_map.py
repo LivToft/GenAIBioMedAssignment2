@@ -12,7 +12,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
-from ruamel.yaml import yaml
+import ruamel.yaml as yaml
+import os
 
 from evo2 import Evo2
 
@@ -44,7 +45,8 @@ def main():
 
     # ---------------- Parameters ----------------
     parser.add_argument("--epochs", type=int, default=None, help="Number of training epochs")
-    parser.add_argument("--pred_head_arch", type=str, default=None, help="Prediction head arhcitecture")
+    parser.add_argument("--pred_head_arch", type=str, default=None, help="Prediction head architecture")
+    parser.add_argument("--output_dir", type=Path, default="evo2/contact_map", help="Output folder")
 
 
     args = parser.parse_args()
@@ -63,15 +65,22 @@ def main():
             name    = args.run_name,
             reinit  = True, 
             entity  = args.wandb_entity,
-            project = args.wanb_project,
+            project = args.wandb_project,
             config  = args.config
     )
 
+    # setup output folder
+    os.makedirs(args.output_dir, exist_ok=True)
+    if args.run_name is None:
+        args.run_name = f'exp-{len(os.listdir(args.output_dir))}'
+    else:
+        args.run_name = f'exp-{len(os.listdir(args.output_dir))}-{args.run_name}'
     
-
-    save_path_str = "evo2/contact_map/HFF/model.pt"
-    save_path = Path(save_path_str)
-    save_path.parent.mkdir(parents=True, exist_ok=True)
+    output_dir = os.path.join(args.output_dir, args.run_name)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    save_dir = os.path.join(output_dir, 'checkpoints')
+    os.makedirs(save_dir, exist_ok=True)
 
     # Set random seeds
     torch.manual_seed(1)
@@ -86,7 +95,7 @@ def main():
     if args.pred_head_arch == "baseline":
         task_layer = nn.Linear(4096*2, 1).to("cuda")
     else:
-        raise NotImplemented("Only baseline prediction head architecture has been implemented.")
+        raise NotImplementedError("Only baseline prediction head architecture has been implemented.")
     
     optimizer = torch.optim.Adam(task_layer.parameters(), lr=6e-4)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
@@ -188,7 +197,7 @@ def main():
 
             if this_val_loss_average < val_loss:
                 val_loss = this_val_loss_average
-                torch.save(task_layer, save_path)
+                torch.save(task_layer, os.path.join(save_dir, 'model.pt'))
 
                 # TODO: WANDB INTEGRATION - Log the best validation loss so far
                 wandb.log({
@@ -197,6 +206,12 @@ def main():
 
             # Print the final validation loss for the epoch
             print(f"Epoch {epoch} final validation loss: {val_loss:.4f}")
+
+    # save config file
+    experiment_config = vars(args)
+    with open(os.path.join(output_dir, 'config.yaml'), 'w', encoding='utf-8') as f:
+        file_yaml = yaml.YAML()
+        file_yaml.dump(experiment_config, f)
 
     # TODO: WANDB INTEGRATION - Finish the run
     run.finish()

@@ -1,0 +1,2 @@
+# BASELINE
+python finetune_contact_map.py --config configs/baseline.yaml

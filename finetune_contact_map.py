@@ -12,6 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
+from ruamel.yaml import yaml
 
 from evo2 import Evo2
 
@@ -30,13 +31,31 @@ def main():
     - Evo 2 1B base: Loss ~0.502, Accuracy ~79.56%
     """
     parser = argparse.ArgumentParser(description="Test Evo2 Model Forward Pass")
-    parser.add_argument("--model_name", choices=['evo2_7b', 'evo2_40b', 'evo2_7b_base', 'evo2_40b_base', 'evo2_1b_base'],
-                       default='evo2_7b',
-                       help="Model to test")
-    
+
+    parser.add_argument("--config", type=str, help="Path to config file", default="configs/baseline.yaml")
+    parser.add_argument("--model_name", choices=['evo2_7b', 'evo2_40b', 'evo2_7b_base', 'evo2_40b_base', 'evo2_1b_base'], default='evo2_7b', help="Model to test")
+
+    # ---------------- WandB ----------------
+    parser.add_argument("--wandb_key", type=str, default=None, help="WandB API key")
+    parser.add_argument("--wandb_entity", type=str, default=None, help="WandB entity name")
+    parser.add_argument("--wandb_project", type=str, default=None, help="WandB project name")
+
+    # ---------------- Hyperparameters ----------------
+    parser.add_argument("--epochs", type=int, default=None, help="Number of training epochs")
+
+
+    args = parser.parse_args()
+
+    if args.config is not None:
+        with open(args.config, 'r', encoding='utf-8') as f:
+            config_args = yaml.safe_load(f)
+            parser.set_defaults(**config_args)
+
     args = parser.parse_args()
 
     # TODO: WANDB INTEGRATION - Initialize a new run
+    
+
 
     save_path_str = "evo2/contact_map/HFF/model.pt"
     save_path = Path(save_path_str)

@@ -19,6 +19,7 @@ from evo2 import Evo2
 from datasets.akita_dataset import get_dataloader
 
 # TODO: WANDB INTEGRATION - Import the library
+import wandb
 
 data_path = "/ocean/projects/cis250160p/rhettiar/contact_map_prediction/extra_data.1m/tfrecords"
 
@@ -39,9 +40,11 @@ def main():
     parser.add_argument("--wandb_key", type=str, default=None, help="WandB API key")
     parser.add_argument("--wandb_entity", type=str, default=None, help="WandB entity name")
     parser.add_argument("--wandb_project", type=str, default=None, help="WandB project name")
+    parser.add_argument("--run_name", type=str, default='i_forgot_to_name', help="run name")
 
-    # ---------------- Hyperparameters ----------------
+    # ---------------- Parameters ----------------
     parser.add_argument("--epochs", type=int, default=None, help="Number of training epochs")
+    parser.add_argument("--pred_head_arch", type=str, default=None, help="Prediction head arhcitecture")
 
 
     args = parser.parse_args()
@@ -54,8 +57,17 @@ def main():
     args = parser.parse_args()
 
     # TODO: WANDB INTEGRATION - Initialize a new run
-    
+    wandb.login(key=args.wandb_key)
 
+    run = wandb.init(
+            name    = args.run_name,
+            reinit  = True, 
+            entity  = args.wandb_entity,
+            project = args.wanb_project,
+            config  = args.config
+    )
+
+    
 
     save_path_str = "evo2/contact_map/HFF/model.pt"
     save_path = Path(save_path_str)
@@ -71,7 +83,10 @@ def main():
     train_loader = get_dataloader(f"{data_path}/train-*.tfr", "HFF")
     valid_loader = get_dataloader(f"{data_path}/valid-*.tfr", "HFF")
 
-    task_layer = nn.Linear(4096*2, 1).to("cuda")
+    if args.pred_head_arch == "baseline":
+        task_layer = nn.Linear(4096*2, 1).to("cuda")
+    else:
+        raise NotImplemented("Only baseline prediction head architecture has been implemented.")
     
     optimizer = torch.optim.Adam(task_layer.parameters(), lr=6e-4)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
@@ -83,6 +98,7 @@ def main():
         
         # Wrap train_loader with tqdm for a progress bar
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch} | Training", unit="batch")
+
         for batch in train_pbar:
             # zero the parameter gradients
             optimizer.zero_grad()
@@ -115,6 +131,9 @@ def main():
             optimizer.step()
 
             # TODO: WANDB INTEGRATION - Log step-wise training loss
+            wandb.log({
+                'train_loss': loss,
+            })
 
             # Update the progress bar with the current loss
             train_pbar.set_postfix(loss=f"{loss.cpu().item():.4f}")
@@ -162,16 +181,25 @@ def main():
             current_lr = lr_scheduler.get_last_lr()[0]
             
             # TODO: WANDB INTEGRATION - Log epoch-wise validation loss and learning rate (make sure to log the epoch number as well)
+            wandb.log({
+                'val_loss': this_val_loss_average,
+                'lr': current_lr,
+            })
 
             if this_val_loss_average < val_loss:
                 val_loss = this_val_loss_average
                 torch.save(task_layer, save_path)
+
                 # TODO: WANDB INTEGRATION - Log the best validation loss so far
+                wandb.log({
+                    'best_val_loss': val_loss,
+                })
 
             # Print the final validation loss for the epoch
             print(f"Epoch {epoch} final validation loss: {val_loss:.4f}")
 
     # TODO: WANDB INTEGRATION - Finish the run
+    run.finish()
 
 if __name__ == "__main__":
     main()

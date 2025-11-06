@@ -1,1 +1,3 @@
-# BASELINE
+python evaluate_contact_map.py --model_path evo2/contact_map/exp-1-baseline/checkpoints/model.pt
+python evaluate_contact_map.py --model_pat evo2/contact_map/exp-2-long/checkpoints/model.pt
+python evaluate_contact_map.py --model_pat evo2/contact_map/exp-3-pairhead/checkpoints/model.pt

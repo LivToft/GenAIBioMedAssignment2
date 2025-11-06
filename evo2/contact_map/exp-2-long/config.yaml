@@ -1,0 +1,12 @@
+config: configs/baseline.yaml
+output_dir: evo2/contact_map
+model_name: evo2_7b
+wandb_key: 347615f78afc5589363b8b9428bd47a69b6b6190
+wandb_project: 11-781_GenAI_Homework2
+run_name: exp-2-long
+epochs: 30
+pred_head_arch: baseline
+proj_dim:
+pair_hidden_dim:
+conv_channels:
+model: evo2_7b

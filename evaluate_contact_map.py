@@ -30,6 +30,7 @@ def main():
     parser = argparse.ArgumentParser(description="Test Evo2 Model Forward Pass")
 
     parser.add_argument("--model_path", type=Path, help="Path to model checkpoint")
+    parser.add_argument("--pred_head_arch", type=str, help="Prediction head architecture")
     parser.add_argument("--model_name", choices=['evo2_7b', 'evo2_40b', 'evo2_7b_base', 'evo2_40b_base', 'evo2_1b_base'], default='evo2_7b', help="Model to test")
 
     
@@ -39,14 +40,13 @@ def main():
     config = os.path.join(model_dir, 'config.yaml')
 
     with open(config, 'r', encoding='utf-8') as f:
-        config_args = yaml.safe_load(f)
+        file_yaml = yaml.YAML()
+        config_args = file_yaml.load(f)
         parser.set_defaults(**config_args)
 
     args = parser.parse_args()
     
-    for cell in ["HFF"]:
-        print(cell)
-        
+    for cell in ["HFF"]:        
         save_path = args.model_path
         fw_pred = open(f"{model_dir}/pred.npy", "wb")
         fw_tgt = open(f"{model_dir}/target.npy", "wb")
@@ -77,14 +77,19 @@ def main():
             outputs, embeddings = model(input_ids, return_embeddings=True, layer_names=[layer_name])
             hiddens = embeddings[layer_name]
             hiddens = torch.mean(hiddens.reshape(hiddens.size(0), -1, 2048, hiddens.size(-1)), dim=2)
-            norm = torch.sqrt(torch.sum(hiddens * hiddens, dim=-1)).unsqueeze(-1) # [B, L]
-            norm = torch.bmm(norm, norm.transpose(1, 2))
-            outs = (torch.bmm(hiddens, hiddens.transpose(1, 2))/norm).reshape(hiddens.size(0), -1)
-            matrix = hiddens[0]
-            vec1 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1).transpose(0, 1)
-            vec2 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1)
-            vec3 = torch.cat((vec2, vec1), dim=-1).reshape(-1, hiddens.size(-1)*2)
-            outs = task_layer(vec3.float()).unsqueeze(0).squeeze(-1)
+
+            if args.pred_head_arch == 'baseline':
+                norm = torch.sqrt(torch.sum(hiddens * hiddens, dim=-1)).unsqueeze(-1) # [B, L]
+                norm = torch.bmm(norm, norm.transpose(1, 2))
+                outs = (torch.bmm(hiddens, hiddens.transpose(1, 2))/norm).reshape(hiddens.size(0), -1)
+                matrix = hiddens[0]
+                vec1 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1).transpose(0, 1)
+                vec2 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1)
+                vec3 = torch.cat((vec2, vec1), dim=-1).reshape(-1, hiddens.size(-1)*2)
+                outs = task_layer(vec3.float()).unsqueeze(0).squeeze(-1)
+
+            elif args.pred_head_arch == 'pairhead':
+                outs = task_layer(hiddens.float())
             
             preds = []
             tgt = []

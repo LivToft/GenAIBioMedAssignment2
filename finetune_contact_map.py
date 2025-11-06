@@ -15,6 +15,8 @@ from tqdm import tqdm
 import ruamel.yaml as yaml
 import os
 
+from prediction_heads.prediction_heads import *
+
 from evo2 import Evo2
 
 from datasets.akita_dataset import get_dataloader
@@ -35,6 +37,8 @@ def main():
     parser = argparse.ArgumentParser(description="Test Evo2 Model Forward Pass")
 
     parser.add_argument("--config", type=str, help="Path to config file", default="configs/baseline.yaml")
+    parser.add_argument("--output_dir", type=str, default="evo2/contact_map", help="Output folder")
+
     parser.add_argument("--model_name", choices=['evo2_7b', 'evo2_40b', 'evo2_7b_base', 'evo2_40b_base', 'evo2_1b_base'], default='evo2_7b', help="Model to test")
 
     # ---------------- WandB ----------------
@@ -45,7 +49,9 @@ def main():
     # ---------------- Parameters ----------------
     parser.add_argument("--epochs", type=int, default=None, help="Number of training epochs")
     parser.add_argument("--pred_head_arch", type=str, default=None, help="Prediction head architecture")
-    parser.add_argument("--output_dir", type=Path, default="evo2/contact_map", help="Output folder")
+    parser.add_argument("--proj_dim", type=int, default=None, help="Projection dimension")
+    parser.add_argument("--pair_hidden_dim", type=int, default=None, help="Hidden layer size in pair MLP")
+    parser.add_argument("--conv_channels", type=int, default=None, help="Number of out channels refinement CNN layers")
 
 
     args = parser.parse_args()
@@ -58,23 +64,23 @@ def main():
 
     args = parser.parse_args()
 
-    # TODO: WANDB INTEGRATION - Initialize a new run
-    wandb.login(key=args.wandb_key)
-
-    run = wandb.init(
-            name    = args.run_name,
-            reinit  = True, 
-            entity  = args.wandb_entity,
-            project = args.wandb_project,
-            config  = args.config
-    )
-
     # setup output folder
     os.makedirs(args.output_dir, exist_ok=True)
     if args.run_name is None:
         args.run_name = f'exp-{len(os.listdir(args.output_dir))}'
     else:
         args.run_name = f'exp-{len(os.listdir(args.output_dir))}-{args.run_name}'
+    
+
+    # TODO: WANDB INTEGRATION - Initialize a new run
+    wandb.login(key=args.wandb_key)
+
+    run = wandb.init(
+            name    = args.run_name,
+            reinit  = True, 
+            project = args.wandb_project,
+            config  = vars(args)
+    )
     
     output_dir = os.path.join(args.output_dir, args.run_name)
     os.makedirs(output_dir, exist_ok=True)
@@ -94,15 +100,25 @@ def main():
 
     if args.pred_head_arch == "baseline":
         task_layer = nn.Linear(4096*2, 1).to("cuda")
+    elif args.pred_head_arch == "pairhead":
+        task_layer = PairHead(input_size=4096, proj_dim=args.proj_dim, pair_hidden_dim=args.pair_hidden_dim, conv_channels=args.conv_channels).to("cuda")
     else:
-        raise NotImplementedError("Only baseline prediction head architecture has been implemented.")
+        raise NotImplementedError("Only baseline and pair prediction head architectures have been implemented.")
     
     optimizer = torch.optim.Adam(task_layer.parameters(), lr=6e-4)
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
+    
+    if args.epochs <= 3:
+        step_size = 3
+        gamma = 0.1
+    else:
+        step_size = args.epochs//6
+        gamma = 0.4
+
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     val_loss = 10000
     dic = {0: "A", 1: "C", 2: "G", 3: "T"}
     
-    for epoch in range(1, 10):
+    for epoch in range(1, args.epochs):
         task_layer.train() # Set model to training mode
         
         # Wrap train_loader with tqdm for a progress bar
@@ -126,14 +142,19 @@ def main():
             outputs, embeddings = model(input_ids, return_embeddings=True, layer_names=[layer_name])
             hiddens = embeddings[layer_name]
             hiddens = torch.mean(hiddens.reshape(hiddens.size(0), -1, 2048, hiddens.size(-1)), dim=2)
-            norm = torch.sqrt(torch.sum(hiddens * hiddens, dim=-1)).unsqueeze(-1) # [B, L]
-            norm = torch.bmm(norm, norm.transpose(1, 2))
-            outs = (torch.bmm(hiddens, hiddens.transpose(1, 2))/norm).reshape(hiddens.size(0), -1)
-            matrix = hiddens[0]
-            vec1 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1).transpose(0, 1)
-            vec2 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1)
-            vec3 = torch.cat((vec2, vec1), dim=-1).reshape(-1, hiddens.size(-1)*2)
-            outs = task_layer(vec3.float()).unsqueeze(0).squeeze(-1)
+
+            if args.pred_head_arch == 'baseline':
+                norm = torch.sqrt(torch.sum(hiddens * hiddens, dim=-1)).unsqueeze(-1) # [B, L]
+                norm = torch.bmm(norm, norm.transpose(1, 2))
+                outs = (torch.bmm(hiddens, hiddens.transpose(1, 2))/norm).reshape(hiddens.size(0), -1)
+                matrix = hiddens[0]
+                vec1 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1).transpose(0, 1)
+                vec2 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1)
+                vec3 = torch.cat((vec2, vec1), dim=-1).reshape(-1, hiddens.size(-1)*2)
+                outs = task_layer(vec3.float()).unsqueeze(0).squeeze(-1)
+
+            elif args.pred_head_arch == 'pairhead':
+                outs = task_layer(hiddens.float())
             
             loss = F.mse_loss(outs, scores)
             loss.backward()
@@ -171,14 +192,19 @@ def main():
                 outputs, embeddings = model(input_ids, return_embeddings=True, layer_names=[layer_name])
                 hiddens = embeddings[layer_name]  # [1, 102400, 4096]
                 hiddens = torch.mean(hiddens.reshape(hiddens.size(0), -1, 2048, hiddens.size(-1)), dim=2)  # [B, 50, dim]
-                norm = torch.sqrt(torch.sum(hiddens * hiddens, dim=-1)).unsqueeze(-1) # [B, L]
-                norm = torch.bmm(norm, norm.transpose(1, 2))
-                outs = (torch.bmm(hiddens, hiddens.transpose(1, 2))/norm).reshape(hiddens.size(0), -1)
-                matrix = hiddens[0]
-                vec1 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1).transpose(0, 1)
-                vec2 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1)
-                vec3 = torch.cat((vec2, vec1), dim=-1).reshape(-1, hiddens.size(-1)*2)
-                outs = task_layer(vec3.float()).unsqueeze(0).squeeze(-1) #[1, 50*50, 1]]
+
+                if args.pred_head_arch == 'baseline':
+                    norm = torch.sqrt(torch.sum(hiddens * hiddens, dim=-1)).unsqueeze(-1) # [B, L]
+                    norm = torch.bmm(norm, norm.transpose(1, 2))
+                    outs = (torch.bmm(hiddens, hiddens.transpose(1, 2))/norm).reshape(hiddens.size(0), -1)
+                    matrix = hiddens[0]
+                    vec1 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1).transpose(0, 1)
+                    vec2 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1)
+                    vec3 = torch.cat((vec2, vec1), dim=-1).reshape(-1, hiddens.size(-1)*2)
+                    outs = task_layer(vec3.float()).unsqueeze(0).squeeze(-1) #[1, 50*50, 1]
+
+                elif args.pred_head_arch == 'pairhead':
+                    outs = task_layer(hiddens.float())
                 
                 loss = F.mse_loss(outs, scores)
                 this_val_loss.append(loss.cpu().item())

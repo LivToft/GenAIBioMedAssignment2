@@ -15,7 +15,7 @@ from tqdm import tqdm
 import ruamel.yaml as yaml
 import os
 
-from prediction_heads.prediction_heads import *
+from prediction_heads.pairhead import *
 
 from evo2 import Evo2
 
@@ -107,7 +107,7 @@ def main():
     
     optimizer = torch.optim.Adam(task_layer.parameters(), lr=6e-4)
     
-    if args.epochs <= 3:
+    if args.epochs <= 10:
         step_size = 3
         gamma = 0.1
     else:

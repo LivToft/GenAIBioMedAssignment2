@@ -1,4 +1,4 @@
-python analyze_performance.py --run_dir evo2/contact_map/exp-1-baseline --n_samples 5
-python analyze_performance.py --run_dir evo2/contact_map/exp-2-long --n_samples 5
-python analyze_performance.py --run_dir evo2/contact_map/exp-3-pairhead --n_samples 5
+python analyze_performance.py --run_dir evo2/contact_map/exp-2-baseline --n_samples 5
+python analyze_performance.py --run_dir evo2/contact_map/exp-0-baseline_extend --n_samples 5
+python analyze_performance.py --run_dir evo2/contact_map/exp-1-pairhead --n_samples 5
 

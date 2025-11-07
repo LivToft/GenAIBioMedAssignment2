@@ -3,3 +3,7 @@
 
 *.pt
 *.npy
+
+/wandb
+
+__pycache__

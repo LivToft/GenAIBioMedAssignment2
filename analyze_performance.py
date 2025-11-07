@@ -92,8 +92,8 @@ def main():
         plt.colorbar(im1, ax=axes[1])
 
         # Big overall title
-        fig.suptitle(f"Contact Maps for Sample {idx_rep} (PCC = {rep_pcc:.4f})", fontsize=14)
-        fig.subplots_adjust(top=0.75)
+        fig.suptitle(f"Sample {idx_rep}\n (PCC = {rep_pcc:.4f})", fontsize=14)
+        fig.subplots_adjust(top=0.70)
 
         fig_name = os.path.join(args.run_dir, f"sample_{idx_rep}.png") 
         plt.savefig(fig_name, dpi=300) 

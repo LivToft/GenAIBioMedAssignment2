@@ -2,13 +2,10 @@
 python finetune_contact_map.py --config configs/baseline.yaml
 
 # Increase no. epochs
-python finetune_contact_map.py --config configs/baseline.yaml --run_name long --epochs 30
+python finetune_contact_map.py --config configs/baseline.yaml --run_name baseline_extend --epochs 30
 
 # New prediction head arch
 python finetune_contact_map.py --config configs/pairhead.yaml --run_name pairhead --epochs 30
 
-# More data
-python finetune_contact_map.py --config configs/baseline.yaml  --run_name more_data --epochs 30
-
 # More data + pairhead
-python finetune_contact_map.py --config configs/pairhead.yaml  --run_name more_data --epochs 30
+python finetune_contact_map.py --config configs/pairhead.yaml  --run_name pairhead_more_data --epochs 30

@@ -44,6 +44,7 @@ def main():
     # ---------------- WandB ----------------
     parser.add_argument("--wandb_key", type=str, default=None, help="WandB API key")
     parser.add_argument("--wandb_project", type=str, default=None, help="WandB project name")
+    parser.add_argument("--wandb_entity", type=str, default=None, help="WandB entity key")
     parser.add_argument("--run_name", type=str, default='i_forgot_to_name', help="run name")
 
     # ---------------- Parameters ----------------
@@ -52,6 +53,7 @@ def main():
     parser.add_argument("--proj_dim", type=int, default=None, help="Projection dimension")
     parser.add_argument("--pair_hidden_dim", type=int, default=None, help="Hidden layer size in pair MLP")
     parser.add_argument("--conv_channels", type=int, default=None, help="Number of out channels refinement CNN layers")
+    parser.add_argument("--downweight_diag", type=int, default=False, help="Down-weight diagonals in loss")
 
 
     args = parser.parse_args()
@@ -78,6 +80,7 @@ def main():
     run = wandb.init(
             name    = args.run_name,
             reinit  = True, 
+            entity  = args.wandb_entity,
             project = args.wandb_project,
             config  = vars(args)
     )
@@ -111,8 +114,8 @@ def main():
         step_size = 3
         gamma = 0.1
     else:
-        step_size = args.epochs//6
-        gamma = 0.4
+        step_size = args.epochs//5
+        gamma = 0.3
 
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     val_loss = 10000
@@ -152,11 +155,21 @@ def main():
                 vec2 = matrix.view(-1, 1, hiddens.size(-1)).repeat(1, hiddens.size(1), 1)
                 vec3 = torch.cat((vec2, vec1), dim=-1).reshape(-1, hiddens.size(-1)*2)
                 outs = task_layer(vec3.float()).unsqueeze(0).squeeze(-1)
+                loss = F.mse_loss(outs, scores)
 
             elif args.pred_head_arch == 'pairhead':
+                
                 outs = task_layer(hiddens.float())
+                
+                if args.downweight_diag:
+                    B, L, _ = hiddens.shape
+                    mask = torch.ones((B, L * L), device=outs.device)
+                    diag_idx = torch.arange(L, device=outs.device) * (L + 1)
+                    mask[:, diag_idx] = 0.1
+                    loss = F.mse_loss(outs*mask, scores*mask)
+                else:
+                    loss = F.mse_loss(outs, scores)
             
-            loss = F.mse_loss(outs, scores)
             loss.backward()
             optimizer.step()
 
@@ -219,6 +232,7 @@ def main():
             wandb.log({
                 'val_loss': this_val_loss_average,
                 'lr': current_lr,
+                'epoch': epoch,
             })
 
             if this_val_loss_average < val_loss:

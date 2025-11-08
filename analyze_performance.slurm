@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -A cis250160p
 #SBATCH -p GPU-shared
-#SBATCH -t 2:00:00
+#SBATCH -t 00:30:00
 #SBATCH --gpus=h100-80:1
 #SBATCH --mem=16G
 #SBATCH --output=slurm_outputs/analyze_performance/%A_%a.out      # Standard output file (%j will be replaced with job ID)

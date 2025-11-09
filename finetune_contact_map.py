@@ -114,8 +114,8 @@ def main():
         step_size = 3
         gamma = 0.1
     else:
-        step_size = args.epochs//5
-        gamma = 0.3
+        step_size = args.epochs//6
+        gamma = 0.4
 
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
     val_loss = 10000
